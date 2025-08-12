@@ -294,7 +294,7 @@ if model is not None:
         if clear_btn:
             st.session_state.uploaded_files = []
             st.session_state.clear_files = True  # trigger re-render
-            st.experimental_rerun()
+            st.rerun()
 
         if analyze_btn:
             healthy_count = 0
@@ -303,35 +303,60 @@ if model is not None:
             cols = st.columns(len(st.session_state.uploaded_files))
 
             for idx, uploaded_file in enumerate(st.session_state.uploaded_files):
-                img = Image.open(uploaded_file)
-                img_resized = preprocess_image_for_display(img, target_size=(256, 256))
-                img_array = image.img_to_array(img_resized) / 255.0
-                img_array = np.expand_dims(img_array, axis=0)
+                # Validate file type and image format
+                try:
+                    # Check if file extension is valid
+                    valid_extensions = ['.jpg', '.jpeg', '.png']
+                    file_extension = '.' + uploaded_file.name.lower().split('.')[-1]
+                    
+                    if file_extension not in valid_extensions:
+                        st.error(f"❌ Invalid file type: {uploaded_file.name}. Please upload JPG, JPEG, or PNG files only.")
+                        continue
 
-                with st.spinner(f'Analyzing {uploaded_file.name}...'):
-                    time.sleep(1)
-                    prediction = model.predict(img_array)[0][0]
-                    if prediction > 0.5:
-                        label = "🟢 Healthy Leaf"
-                        confidence = prediction
-                        healthy_count += 1
-                    else:
-                        label = "🔴 Diseased Leaf"
-                        confidence = 1 - prediction
-                        diseased_count += 1
+                    # Try to open and validate the image
+                    img = Image.open(uploaded_file)
+                    
+                    # Verify image can be processed
+                    img.verify()  # Verify image integrity
+                    img = Image.open(uploaded_file)  # Reopen after verify
+                    
+                    # Check image mode and convert if necessary
+                    if img.mode not in ['RGB', 'RGBA']:
+                        img = img.convert('RGB')
+                    
+                    img_resized = preprocess_image_for_display(img, target_size=(256, 256))
+                    img_array = image.img_to_array(img_resized) / 255.0
+                    img_array = np.expand_dims(img_array, axis=0)
 
-                with cols[idx]:
-                    # Display the resized image for consistency
-                    original_size = f"{img.size[0]}×{img.size[1]}"
-                    processed_size = f"{img_resized.size[0]}×{img_resized.size[1]}"
-                    st.image(img_resized, use_container_width=True, 
-                            caption=f"📁 {uploaded_file.name} (Original: {original_size} → Processed: {processed_size})")
-                    st.markdown(f"""
-                        <div class='result-card'>
-                            Result: {label}<br>
-                            Confidence: {confidence*100:.2f}%
-                        </div>
-                    """, unsafe_allow_html=True)
+                    with st.spinner(f'Analyzing {uploaded_file.name}...'):
+                        time.sleep(1)
+                        prediction = model.predict(img_array)[0][0]
+                        if prediction > 0.5:
+                            label = "🟢 Healthy Leaf"
+                            confidence = prediction
+                            healthy_count += 1
+                        else:
+                            label = "🔴 Diseased Leaf"
+                            confidence = 1 - prediction
+                            diseased_count += 1
+
+                    with cols[idx]:
+                        # Display the resized image for consistency
+                        original_size = f"{img.size[0]}×{img.size[1]}"
+                        processed_size = f"{img_resized.size[0]}×{img_resized.size[1]}"
+                        st.image(img_resized, use_container_width=True, 
+                                caption=f"📁 {uploaded_file.name} (Original: {original_size} → Processed: {processed_size})")
+                        st.markdown(f"""
+                            <div class='result-card'>
+                                Result: {label}<br>
+                                Confidence: {confidence*100:.2f}%
+                            </div>
+                        """, unsafe_allow_html=True)
+
+                except Image.UnidentifiedImageError:
+                    st.error(f"❌ The file {uploaded_file.name} is not a valid image. Please upload JPG, JPEG, or PNG files only.")
+                except Exception as e:
+                    st.error(f"❌ Error processing {uploaded_file.name}: {str(e)}")
 
             st.markdown(f"""
                 <div class='summary'>
@@ -340,8 +365,8 @@ if model is not None:
                     🔴 Diseased Leaves: {diseased_count}
                 </div>
             """, unsafe_allow_html=True)
-else:
-    st.markdown(
-        '<div class="upload-box">👈 Please upload one or more guava leaf images to begin analysis.</div>', 
+    else:
+        st.markdown(
+        '<div class="upload-box">👆 Please upload one or more guava leaf images to begin analysis.</div>', 
         unsafe_allow_html=True
     )
